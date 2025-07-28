@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+*.ipynb_checkpoints
+.DS_Store
+.idea/
+.vscode/
+*.sqlite3
+
+# Anaconda
+*.conda
+*.egg-info
+*.egg
+*.log
+*.bak
+*.swp
+*.lock
+env/
+venv/
+.venv/
+*.tar.gz
