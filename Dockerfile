@@ -1,7 +1,23 @@
 FROM python:3.10-slim
+
+# Создаём рабочую директорию
 WORKDIR /app
-ENV PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1
+
+# Устанавливаем системные зависимости (если нужны, можно дописать)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Сначала копируем только requirements.txt
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+
+# Обновляем pip и ставим зависимости
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# Теперь копируем весь код
 COPY . .
-CMD ["python", "-u", "telegram_bot.py"]
+
+# Команда по умолчанию
+CMD ["python", "main.py"]
+

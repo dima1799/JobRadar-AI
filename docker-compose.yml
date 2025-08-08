@@ -5,17 +5,16 @@ services:
     restart: always
     volumes:
       - ./qdrant_storage:/qdrant/storage
-    # если нужно дергать Qdrant снаружи — раскомментируй
     ports:
       - "6333:6333"
 
   bot:
     build: .
     restart: always
+    network_mode: host          # <-- ключевая строка
     volumes:
-      - ./data:/app/data
-    depends_on:
-      - qdrant
+      - .:/app
+    working_dir: /app
     env_file: .env
     environment:
       - HTTP_PROXY=${HTTP_PROXY}
@@ -24,3 +23,5 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY}
       - EMBED_MODEL=${EMBED_MODEL}
+    # depends_on и extra_hosts больше не нужны при host-сети
+

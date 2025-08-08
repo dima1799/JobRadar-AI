@@ -8,7 +8,7 @@ __pycache__/
 .idea/
 .vscode/
 *.sqlite3
-
+qdrant_storage/
 # Anaconda
 *.conda
 *.egg-info
