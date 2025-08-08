@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: always
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    # если нужно дергать Qdrant снаружи — раскомментируй
+    ports:
+      - "6333:6333"
+
+  bot:
+    build: .
+    restart: always
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - qdrant
+    env_file: .env
+    environment:
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - QDRANT_URL=${QDRANT_URL}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY}
+      - EMBED_MODEL=${EMBED_MODEL}

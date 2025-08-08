@@ -17,8 +17,8 @@ client_llm = OpenAI(
 )
 
 # 3. Qdrant и эмбеддинг модель
-qdrant = QdrantClient(url="http://localhost:6333")
-model = SentenceTransformer("deepvk/USER-bge-m3")
+qdrant = QdrantClient(url="QDRANT_URL")
+model = SentenceTransformer(os.getenv("EMBED_MODEL"))
 
 # 4. Функция генерации
 def generate_response(prompt: str, max_tokens: int = 512):
