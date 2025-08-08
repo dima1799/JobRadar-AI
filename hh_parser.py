@@ -1,50 +1,53 @@
+"""Парсер вакансий hh.ru.
+
+Модуль собирает свежие вакансии по заданным запросам и
+возвращает DataFrame с ключевыми полями, подходящими для
+дальнейшей индексации в Qdrant и использования RAG-движком.
+"""
+
 from bs4 import BeautifulSoup
-import pandas as pd
 import json
-import requests
 import random
 import time
 
-# Список бесплатных прокси
-def find_proxis():
-# URL страницы с прокси
+import pandas as pd
+import requests
+
+def find_proxis() -> list[str]:
+    """Возвращает список бесплатных HTTP-прокси."""
+
     url = "https://free-proxy-list.net/"
-
-# Запрос для получения HTML страницы
     response = requests.get(url)
-    response.raise_for_status()  # Если запрос не удастся, выбросит ошибку
+    response.raise_for_status()
 
-# Разбор HTML страницы с использованием BeautifulSoup
-    soup = BeautifulSoup(response.text, 'html.parser')
+    soup = BeautifulSoup(response.text, "html.parser")
+    table = soup.find("table", {"class": "table table-striped table-bordered"})
 
-# Найдём таблицу с прокси
-    table = soup.find('table', {'class': 'table table-striped table-bordered'})
-# Список для хранения прокси
-    proxies = []
-
-# Извлекаем прокси из таблицы
-    for row in table.find_all('tr')[1:]:  # Пропускаем заголовок таблицы
-        columns = row.find_all('td')
-        if len(columns) > 0:
+    proxies: list[str] = []
+    for row in table.find_all("tr")[1:]:
+        columns = row.find_all("td")
+        if columns:
             ip = columns[0].text.strip()
             port = columns[1].text.strip()
-            proxy = f"http://{ip}:{port}"
-            proxies.append(proxy)
+            proxies.append(f"http://{ip}:{port}")
     return proxies
 
-# Функция для выполнения запросов с п/овторными попытками
-def retry_request(url, params=None, retries=5, delay=5):
+def retry_request(url, params=None, retries: int = 5, delay: int = 5):
+    """Выполняет запрос с повторными попытками, выбирая случайный прокси."""
+
     for attempt in range(retries):
-        proxy = {'http': random.choice(find_proxis())}  # Выбираем случайный прокси
+        proxy = {"http": random.choice(find_proxis())}
 
         try:
             response = requests.get(url, params=params, proxies=proxy)
-            response.raise_for_status()  # Вызовет исключение, если статус-код не успешный (4xx или 5xx)
+            response.raise_for_status()
             return response
         except requests.exceptions.RequestException as e:
             print(f"Ошибка при запросе с прокси {proxy}: {e}")
             if attempt < retries - 1:
-                print(f"Попытка {attempt + 1} из {retries}. Повтор через {delay} секунд...")
+                print(
+                    f"Попытка {attempt + 1} из {retries}. Повтор через {delay} секунд..."
+                )
                 time.sleep(delay)
             else:
                 print("Максимальное количество попыток достигнуто. Завершение работы.")
@@ -63,7 +66,8 @@ def retry_request(url, params=None, retries=5, delay=5):
 
 
 def query(per_page, search_queries, area, period, pages_to_parse, field, skills_search):
-    # Создаём список для итогового DataFrame
+    """Получает список вакансий из API hh.ru."""
+
     frames = []
     
     # Обход по разным ключевым словам
@@ -74,12 +78,12 @@ def query(per_page, search_queries, area, period, pages_to_parse, field, skills_
             print(f"  Страница {page + 1} из {pages_to_parse}")
             url = 'https://api.hh.ru/vacancies'
             params = {
-                'page': page,
-                'per_page': per_page,
-                'text': f'!{query}',  # Точный поиск для текущего запроса
-                'area': area,
-                'period': period,
-                'field': field
+                "page": page,
+                "per_page": per_page,
+                "text": f"!{query}",  # Точный поиск
+                "area": area,
+                "period": period,
+                "field": field,
             }
 
             # Запрос к API для получения списка вакансий с повторными попытками
@@ -104,15 +108,13 @@ def query(per_page, search_queries, area, period, pages_to_parse, field, skills_
                             vacancy_data = vacancy_response.json()
                             key_skills = vacancy_data.get("key_skills", [])
                             skills = [skill["name"] for skill in key_skills]
-
-                            # Добавляем ключевые навыки в item
-                            item['key_skills'] = ", ".join(skills)
+                            item["key_skills"] = ", ".join(skills)
                         except Exception as e:
                             print(f"Ошибка при получении данных вакансии ID {vacancy_id}: {e}")
                             item['key_skills'] = None  # Если запрос по ID не удался
 
                         # Добавляем текущий запрос как отдельное поле
-                        item['search_query'] = query
+                        item["search_query"] = query
                         # Добавляем данные вакансии в список
                         frames.append(item)
 
@@ -122,104 +124,123 @@ def query(per_page, search_queries, area, period, pages_to_parse, field, skills_
                     continue  # Продолжаем обработку следующей страницы или запроса
             else:
                 response = retry_request(url, params=params)
-                frames.extend(response.json()['items'])
+                frames.extend(response.json()["items"])
     return frames
 
 
-def df_main(frames):
-    cols = ['name',
-            'published_at',
-            'url', 
-            'alternate_url',
-            'employer_name',
-            'experience_name',
-            'schedule_name',
-            'professional_roles_name',
-            'area_name']
-    # Создание итогового DataFrame
-    if frames:
-        result = pd.DataFrame(frames)
-        # Выбираем только важные колонки для записи
-        # result = result[['id', 'name', 'employer', 'area', 'salary', 'key_skills', 'search_query']]
-        print("\n✅ Итоговый DataFrame создан.")
+def df_main(frames: list[dict]) -> pd.DataFrame:
+    """Нормализует список вакансий в DataFrame."""
 
-        # Первый проход для нормализации столбцов
-        result1 = result.copy()
-        for i in result.columns:
-            df_normalized = pd.json_normalize(result[i])
-            if len(df_normalized.columns) > 1:
-                # Переименовываем столбцы в нормализованном DataFrame
-                df_normalized.columns = [f"{i}_{col}" for col in df_normalized.columns]
-                # Объединяем результаты
-                result1 = pd.concat([result1.drop(columns=[i]), df_normalized], axis=1)
-        result1['professional_roles_id'] = result1['professional_roles'].apply(lambda x: x[0]['id'] if x else None)
-        result1['professional_roles_name'] = result1['professional_roles'].apply(lambda x: x[0]['name'] if x else None)
-        
-        # Цикл для удаления столбцов с неправильными типами данных
-        while True:
-            columns_to_drop = []
-            for i in result1.columns:
-                # Проверяем, что столбец не пустой
-                if not result1[i].empty:
-                    # Проверяем тип данных всех элементов столбца
-                    if result1[i].apply(lambda x: isinstance(x, (dict, list))).any():
-                        columns_to_drop.append(i)
-            # Удаляем столбцы, которые нужно удалить
-            if columns_to_drop:
-                result1.drop(columns=columns_to_drop, inplace=True)
-            else:
-                break
-            
-        # Сохранение в Excel (закомментировано)
-        # result1.to_csv('vacancies_with_skills1.csv', index=False)
-        # print("📁 Данные сохранены в 'vacancies_with_skills.xlsx'.")
-    else:
+    cols = [
+        "name",
+        "published_at",
+        "url",
+        "alternate_url",
+        "employer_name",
+        "experience_name",
+        "schedule_name",
+        "professional_roles_name",
+        "area_name",
+    ]
+
+    if not frames:
         print("\n❌ Не удалось собрать данные.")
+        return pd.DataFrame(columns=cols)
+
+    result = pd.DataFrame(frames)
+    print("\n✅ Итоговый DataFrame создан.")
+
+    result1 = result.copy()
+    for col in result.columns:
+        df_normalized = pd.json_normalize(result[col])
+        if len(df_normalized.columns) > 1:
+            df_normalized.columns = [f"{col}_{c}" for c in df_normalized.columns]
+            result1 = pd.concat([result1.drop(columns=[col]), df_normalized], axis=1)
+
+    result1["professional_roles_id"] = result1["professional_roles"].apply(
+        lambda x: x[0]["id"] if x else None
+    )
+    result1["professional_roles_name"] = result1["professional_roles"].apply(
+        lambda x: x[0]["name"] if x else None
+    )
+
+    while True:
+        columns_to_drop = []
+        for col in result1.columns:
+            if not result1[col].empty and result1[col].apply(
+                lambda x: isinstance(x, (dict, list))
+            ).any():
+                columns_to_drop.append(col)
+        if columns_to_drop:
+            result1.drop(columns=columns_to_drop, inplace=True)
+        else:
+            break
 
     return result1[cols]
 
-def extract_description(vacancy_json):
-    """
-    Принимает JSON-строку вакансии hh.ru
-    Возвращает чистый текст описания без HTML
-    """
-    # Преобразуем строку в Python-словарь
+def extract_description(vacancy_json: str) -> str:
+    """Возвращает чистый текст описания вакансии из JSON."""
+
     data = json.loads(vacancy_json)
-    
-    # Достаем поле description (оно в формате HTML)
     html_description = data.get("description", "")
     if not html_description:
         return ""
-    
-    # Парсим HTML и превращаем в текст
+
     soup = BeautifulSoup(html_description, "html.parser")
-    clean_text = soup.get_text(separator=" ", strip=True)
-    return clean_text
+    return soup.get_text(separator=" ", strip=True)
 
-def add_description(df):
-    df_len = df.shape[0]
-    description = []
-    for i in range(df_len):
-        response = requests.get(df['url'][i])  
+def add_description(df: pd.DataFrame) -> pd.DataFrame:
+    """Добавляет колонку `description`, запрашивая описание по API URL."""
+
+    descriptions = []
+    for api_url in df["url"]:
+        response = requests.get(api_url)
         response.raise_for_status()
-        description.append(extract_description(response.text))
+        descriptions.append(extract_description(response.text))
 
-    df['description'] = description
+    df["description"] = descriptions
     return df
 
 
-per_page = 50
-search_queries = ['Data Scientist','LLM','NLP','ML Engineer']
-area = 1
-period = 1
-pages_to_parse = 2
-field = 'name'
-skills_search = False
-prof_name = ['Дата-сайентист']
+def parse_hh_vacancies(
+    search_queries,
+    per_page: int = 50,
+    area: int = 1,
+    period: int = 1,
+    pages_to_parse: int = 2,
+    field: str = "name",
+    skills_search: bool = False,
+    prof_names: list[str] | None = None,
+) -> pd.DataFrame:
+    """Основная функция парсинга hh.ru.
 
-res = query(per_page, search_queries, area, period, pages_to_parse, field, skills_search)
-b = df_main(res)
-b = b[b['professional_roles_name'].isin(prof_name)].reset_index()
-new_df = add_description(b)
-new_df.to_csv("vacancies_hh.csv",index=False)
+    Возвращает DataFrame с полями: title, company, experience, description, url.
+    """
+
+    frames = query(per_page, search_queries, area, period, pages_to_parse, field, skills_search)
+    df = df_main(frames)
+
+    if prof_names:
+        df = df[df["professional_roles_name"].isin(prof_names)]
+
+    df = df.reset_index(drop=True)
+    df = add_description(df)
+
+    df = df.rename(
+        columns={
+            "name": "title",
+            "employer_name": "company",
+            "experience_name": "experience",
+            "alternate_url": "url",
+        }
+    )
+
+    # Оставляем только необходимые колонки
+    return df[["title", "company", "experience", "description", "url"]]
+
+
+if __name__ == "__main__":
+    queries = ["Data Scientist", "LLM", "NLP", "ML Engineer"]
+    result_df = parse_hh_vacancies(queries, prof_names=["Дата-сайентист"])
+    result_df.to_csv("vacancies_hh.csv", index=False)
 
