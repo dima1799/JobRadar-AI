@@ -22,3 +22,5 @@ env/
 venv/
 .venv/
 *.tar.gz
+hf_cache/
+models/
