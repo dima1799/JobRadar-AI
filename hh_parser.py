@@ -1,46 +1,58 @@
-"""Парсер вакансий hh.ru с поддержкой собственного прокси.
-
-Все запросы к API hh.ru идут через SOCKS5/HTTP-прокси, заданный
-в переменной окружения SOCKS5_PROXY.
-"""
-
-import os
+"""Парсер вакансий hh.ru."""
+from bs4 import BeautifulSoup
 import json
+import random
 import time
+import os
+from pathlib import Path
+
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
+
+# --- Пути ---
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_CSV = PROJECT_ROOT / "data" / "vacancies_hh.csv"
+CSV_PATH = Path(os.getenv("CSV_PATH", str(DEFAULT_CSV)))
 
 
-# ==== Глобальная сессия с прокси ====
-PROXY = os.getenv("SOCKS5_PROXY")  # пример: socks5h://host.docker.internal:1080
-session = requests.Session()
-if PROXY:
-    session.proxies.update({
-        "http": PROXY,
-        "https": PROXY
-    })
+def find_proxis() -> list[str]:
+    """Возвращает список бесплатных HTTP-прокси."""
+    url = "https://free-proxy-list.net/"
+    response = requests.get(url)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
+    table = soup.find("table", {"class": "table table-striped table-bordered"})
+    proxies: list[str] = []
+    for row in table.find_all("tr")[1:]:
+        columns = row.find_all("td")
+        if columns:
+            ip = columns[0].text.strip()
+            port = columns[1].text.strip()
+            proxies.append(f"http://{ip}:{port}")
+    return proxies
 
 
 def retry_request(url, params=None, retries: int = 5, delay: int = 5):
-    """Выполняет GET-запрос с повторными попытками."""
+    """Выполняет запрос с повторными попытками, выбирая случайный прокси."""
     for attempt in range(retries):
+        proxy = {"http": random.choice(find_proxis())}
         try:
-            response = session.get(url, params=params, timeout=15)
+            response = requests.get(url, params=params, proxies=proxy)
             response.raise_for_status()
             return response
-        except requests.RequestException as e:
-            print(f"Ошибка при запросе {url}: {e}")
+        except requests.exceptions.RequestException as e:
+            print(f"Ошибка при запросе с прокси {proxy}: {e}")
             if attempt < retries - 1:
-                print(f"Попытка {attempt + 1} из {retries}. Жду {delay} сек...")
+                print(f"Попытка {attempt + 1} из {retries}. Повтор через {delay} секунд...")
                 time.sleep(delay)
-    raise RuntimeError(f"Не удалось выполнить запрос: {url}")
+            else:
+                print(f"Максимальное количество попыток достигнуто: {url}")
+                raise
 
 
 def query(per_page, search_queries, area, period, pages_to_parse, field, skills_search):
     """Получает список вакансий из API hh.ru."""
     frames = []
-
     for query in search_queries:
         print(f"\n🔍 Обрабатываю запрос: '{query}'")
         for page in range(pages_to_parse):
@@ -54,15 +66,12 @@ def query(per_page, search_queries, area, period, pages_to_parse, field, skills_
                 "period": period,
                 "field": field,
             }
-
-            response = retry_request(url, params=params)
-            data_json = response.json()
-
-            if not data_json.get("items"):
-                print("    Вакансии не найдены на странице.")
-                continue
-
-            if skills_search:
+            try:
+                response = retry_request(url, params=params)
+                data_json = response.json()
+                if not data_json.get("items"):
+                    print("    Вакансии не найдены.")
+                    continue
                 for item in data_json["items"]:
                     vacancy_id = item["id"]
                     vacancy_url = f"https://api.hh.ru/vacancies/{vacancy_id}"
@@ -73,13 +82,14 @@ def query(per_page, search_queries, area, period, pages_to_parse, field, skills_
                         skills = [skill["name"] for skill in key_skills]
                         item["key_skills"] = ", ".join(skills)
                     except Exception as e:
-                        print(f"Ошибка при получении skills для {vacancy_id}: {e}")
+                        print(f"Ошибка при получении ID {vacancy_id}: {e}")
                         item["key_skills"] = None
                     item["search_query"] = query
                     frames.append(item)
                     time.sleep(0.2)
-            else:
-                frames.extend(data_json["items"])
+            except Exception as e:
+                print(f"Ошибка при запросе списка: {e}")
+                continue
     return frames
 
 
@@ -96,38 +106,31 @@ def df_main(frames: list[dict]) -> pd.DataFrame:
         "professional_roles_name",
         "area_name",
     ]
-
     if not frames:
         print("\n❌ Не удалось собрать данные.")
         return pd.DataFrame(columns=cols)
-
     result = pd.DataFrame(frames)
-    print("\n✅ Итоговый DataFrame создан.")
-
     result1 = result.copy()
     for col in result.columns:
         df_normalized = pd.json_normalize(result[col])
         if len(df_normalized.columns) > 1:
             df_normalized.columns = [f"{col}_{c}" for c in df_normalized.columns]
             result1 = pd.concat([result1.drop(columns=[col]), df_normalized], axis=1)
-
     result1["professional_roles_id"] = result1["professional_roles"].apply(
         lambda x: x[0]["id"] if x else None
     )
     result1["professional_roles_name"] = result1["professional_roles"].apply(
         lambda x: x[0]["name"] if x else None
     )
-
     while True:
-        columns_to_drop = [
-            col for col in result1.columns
-            if not result1[col].empty and result1[col].apply(lambda x: isinstance(x, (dict, list))).any()
-        ]
+        columns_to_drop = []
+        for col in result1.columns:
+            if not result1[col].empty and result1[col].apply(lambda x: isinstance(x, (dict, list))).any():
+                columns_to_drop.append(col)
         if columns_to_drop:
             result1.drop(columns=columns_to_drop, inplace=True)
         else:
             break
-
     return result1[cols]
 
 
@@ -142,10 +145,11 @@ def extract_description(vacancy_json: str) -> str:
 
 
 def add_description(df: pd.DataFrame) -> pd.DataFrame:
-    """Добавляет колонку `description`."""
+    """Добавляет колонку description, запрашивая описание по API URL."""
     descriptions = []
     for api_url in df["url"]:
-        response = retry_request(api_url)
+        response = requests.get(api_url)
+        response.raise_for_status()
         descriptions.append(extract_description(response.text))
     df["description"] = descriptions
     return df
@@ -161,16 +165,12 @@ def parse_hh_vacancies(
     skills_search: bool = False,
     prof_names: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Основная функция парсинга hh.ru."""
     frames = query(per_page, search_queries, area, period, pages_to_parse, field, skills_search)
     df = df_main(frames)
-
     if prof_names:
         df = df[df["professional_roles_name"].isin(prof_names)]
-
     df = df.reset_index(drop=True)
     df = add_description(df)
-
     df = df.rename(
         columns={
             "name": "title",
@@ -185,4 +185,7 @@ def parse_hh_vacancies(
 if __name__ == "__main__":
     queries = ["Data Scientist", "LLM", "NLP", "ML Engineer"]
     result_df = parse_hh_vacancies(queries, prof_names=["Дата-сайентист"])
-    result_df.to_csv("vacancies_hh.csv", index=False)
+    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)  # создаём папку data, если нет
+    result_df.to_csv(CSV_PATH, index=False)
+    print("cwd:", os.getcwd())
+    print(f"✅ Файл сохранён: {CSV_PATH}")

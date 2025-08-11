@@ -18,6 +18,4 @@ RUN pip install --upgrade pip && \
 # Теперь копируем весь код
 COPY . .
 
-# Команда по умолчанию
-CMD ["python", "main.py"]
 

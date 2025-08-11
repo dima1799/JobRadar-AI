@@ -9,6 +9,7 @@ __pycache__/
 .vscode/
 *.sqlite3
 qdrant_storage/
+/data/
 # Anaconda
 *.conda
 *.egg-info

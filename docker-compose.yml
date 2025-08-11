@@ -17,9 +17,9 @@ services:
     working_dir: /app
     env_file: .env
     environment:
-      - HTTP_PROXY=${HTTP_PROXY}
-      - HTTPS_PROXY=${HTTPS_PROXY}
-      - QDRANT_URL=${QDRANT_URL}
+      - NO_PROXY=127.0.0.1,localhost,qdrant,85.208.208.39
+      - no_proxy=127.0.0.1,localhost,qdrant,85.208.208.39
+      - QDRANT_URL=http://127.0.0.1:6333   # если bot в host-сети
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY}
       - EMBED_MODEL=${EMBED_MODEL}
