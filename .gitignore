@@ -24,3 +24,6 @@ venv/
 *.tar.gz
 hf_cache/
 models/
+airflow/
+dags/
+logs/

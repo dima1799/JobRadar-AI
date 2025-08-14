@@ -1,21 +1,21 @@
 FROM python:3.10-slim
 
-# Создаём рабочую директорию
-WORKDIR /app
-
-# Устанавливаем системные зависимости (если нужны, можно дописать)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Установка системных библиотек
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libffi-dev \
     build-essential \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Сначала копируем только requirements.txt
+# Установка pip-зависимостей
 COPY requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# Обновляем pip и ставим зависимости
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Копируем код проекта в контейнер
+COPY . /app
 
-# Теперь копируем весь код
-COPY . .
+
 
 

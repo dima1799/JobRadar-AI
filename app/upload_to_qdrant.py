@@ -9,14 +9,11 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 # ---- пути ----
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CSV = PROJECT_ROOT / "data" / "vacancies_hh.csv"
-
-CSV_PATH      = Path(os.getenv("CSV_PATH", str(DEFAULT_CSV)))
-QDRANT_URL    = os.getenv("QDRANT_URL", "http://127.0.0.1:6333")
+CSV_PATH = Path(os.getenv("CSV_PATH", "/opt/airflow/data/vacancies_hh.csv"))
+QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
 COLLECTION    = os.getenv("QDRANT_COLLECTION", "vacancies")
 EMBED_MODEL   = os.getenv("EMBED_MODEL", "deepvk/USER-bge-m3")
-BATCH_SIZE    = int(os.getenv("BATCH_SIZE", "64"))
+BATCH_SIZE    = int(os.getenv("BATCH_SIZE", "8"))
 
 def main():
     if not CSV_PATH.exists():

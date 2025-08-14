@@ -10,9 +10,7 @@ import pandas as pd
 import requests
 
 # --- Пути ---
-PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_CSV = PROJECT_ROOT / "data" / "vacancies_hh.csv"
-CSV_PATH = Path(os.getenv("CSV_PATH", str(DEFAULT_CSV)))
+CSV_PATH = Path(os.getenv("CSV_PATH", "/opt/airflow/data/vacancies_hh.csv"))
 
 
 def find_proxis() -> list[str]:
