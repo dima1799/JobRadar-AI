@@ -9,7 +9,7 @@ import httpx
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jobradar-bot")
 
-QDRANT_URL = os.getenv("QDRANT_URL", "http://127.0.0.1:6333")
+QDRANT_URL = "http://127.0.0.1:6333"
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "vacancies")
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -55,7 +55,11 @@ async def call_together(prompt: str, model_name: str = "meta-llama/Meta-Llama-3.
         "temperature": 0.3,
         "max_tokens": max_tokens,
     }
-    async with httpx.AsyncClient(timeout=60) as client:
+    proxies = {
+    "http://": "socks5://127.0.0.1:1080",
+    "https://": "socks5://127.0.0.1:1080",
+            }
+    async with httpx.AsyncClient(proxies=proxies,timeout=60) as client:
         r = await client.post(url, headers=headers, json=body)
         r.raise_for_status()
         data = r.json()
