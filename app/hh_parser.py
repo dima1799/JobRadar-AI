@@ -168,7 +168,9 @@ def parse_hh_vacancies(
     if prof_names:
         df = df[df["professional_roles_name"].isin(prof_names)]
     df = df.reset_index(drop=True)
+    # test fix url
     df = add_description(df)
+    df.drop(columns= "url",inplace=True)
     df = df.rename(
         columns={
             "name": "title",
@@ -181,7 +183,7 @@ def parse_hh_vacancies(
 
 
 if __name__ == "__main__":
-    queries = ["Data Scientist", "LLM", "NLP", "ML Engineer"]
+    queries = ["Data Scientist","ML Engineer"]
     result_df = parse_hh_vacancies(queries, prof_names=["Дата-сайентист"])
     CSV_PATH.parent.mkdir(parents=True, exist_ok=True)  # создаём папку data, если нет
     result_df.to_csv(CSV_PATH, index=False)
