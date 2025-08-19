@@ -23,9 +23,7 @@ Telegram → run_bot.py → Qdrant (поиск вакансий) → LLM (Togeth
                   Embeddings
                       ↑
         Airflow DAG (парсинг hh.ru → Qdrant)
-```text
 
-```text
 ## Структура 
 ├── app/
 │   ├── run_bot.py           # Запуск Telegram-бота
@@ -38,10 +36,9 @@ Telegram → run_bot.py → Qdrant (поиск вакансий) → LLM (Togeth
 ├── requirements.txt
 ├── .env                     
 └── README.md
-```text
 
 ## TODO 
  Улучшить форматирование ответа (каждая вакансия отдельным сообщением)
  Добавить анти-дублирование вакансий
 
-
+```text
