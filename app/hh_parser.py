@@ -9,9 +9,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-# --- Пути ---
-CSV_PATH = Path(os.getenv("CSV_PATH", "/opt/airflow/data/vacancies_hh.csv"))
-
+SAVE_VACANCIES_AIRFLOW_PATH = os.getenv("SAVE_VACANCIES_AIRFLOW_PATH")
 
 def find_proxis() -> list[str]:
     """Возвращает список бесплатных HTTP-прокси."""
@@ -185,7 +183,6 @@ def parse_hh_vacancies(
 if __name__ == "__main__":
     queries = ["Data Scientist","ML Engineer"]
     result_df = parse_hh_vacancies(queries, prof_names=["Дата-сайентист"])
-    CSV_PATH.parent.mkdir(parents=True, exist_ok=True)  # создаём папку data, если нет
-    result_df.to_csv(CSV_PATH, index=False)
+    result_df.to_csv(SAVE_VACANCIES_AIRFLOW_PATH, index=False)
     print("cwd:", os.getcwd())
-    print(f"✅ Файл сохранён: {CSV_PATH}")
+    print(f"✅ Файл сохранён: {SAVE_VACANCIES_AIRFLOW_PATH}")

@@ -25,5 +25,4 @@ venv/
 hf_cache/
 models/
 airflow/
-dags/
 logs/

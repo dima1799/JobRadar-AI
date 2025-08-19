@@ -8,18 +8,15 @@ from qdrant_client.http import models
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-# ---- пути ----
-CSV_PATH = Path(os.getenv("CSV_PATH", "/opt/airflow/data/vacancies_hh.csv"))
-QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
-COLLECTION    = os.getenv("QDRANT_COLLECTION", "vacancies")
-EMBED_MODEL   = os.getenv("EMBED_MODEL", "deepvk/USER-bge-m3")
-BATCH_SIZE    = int(os.getenv("BATCH_SIZE", "8"))
+SAVE_VACANCIES_AIRFLOW_PATH = os.getenv("SAVE_VACANCIES_AIRFLOW_PATH")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
+EMBED_MODEL = os.getenv("EMBED_MODEL")
+BATCH_SIZE = 8
 
 def main():
-    if not CSV_PATH.exists():
-        raise FileNotFoundError(f"CSV не найден: {CSV_PATH}")
-
-    df = pd.read_csv(CSV_PATH)
+    
+    df = pd.read_csv(SAVE_VACANCIES_AIRFLOW_PATH)
     # ожидаем колонки из парсера: title, company, experience, description, url
     for col in ["title", "company", "experience", "description", "url"]:
         if col not in df.columns:
@@ -34,10 +31,10 @@ def main():
 
     # создаём коллекцию при отсутствии
     try:
-        client.get_collection(COLLECTION)
+        client.get_collection(QDRANT_COLLECTION)
     except Exception:
         client.create_collection(
-            collection_name=COLLECTION,
+            collection_name=QDRANT_COLLECTION,
             vectors_config=models.VectorParams(size=dim, distance=models.Distance.COSINE),
         )
 
@@ -59,7 +56,7 @@ def main():
                     payload=payload,
                 )
             )
-        client.upsert(collection_name=COLLECTION, points=points)
+        client.upsert(collection_name=QDRANT_COLLECTION, points=points)
 
     n = len(docs)
     steps = math.ceil(n / BATCH_SIZE)
@@ -69,8 +66,8 @@ def main():
         vecs = model.encode(docs[a:b], batch_size=BATCH_SIZE, show_progress_bar=False)
         upsert_chunk(vecs, a)
 
-    print(f"✅ Залили {n} документов в коллекцию '{COLLECTION}' ({QDRANT_URL})")
-    print(f"📄 Источник CSV: {CSV_PATH}")
+    print(f"✅ Залили {n} документов в коллекцию '{QDRANT_COLLECTION}' ({QDRANT_URL})")
+    print(f"📄 Источник CSV: {SAVE_VACANCIES_AIRFLOW_PATH}")
 
 if __name__ == "__main__":
     main()
