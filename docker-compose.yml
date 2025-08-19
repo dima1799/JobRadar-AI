@@ -100,23 +100,17 @@ services:
     restart: no
     working_dir: /app
     volumes:
-      - .:/app                      # код проекта
-      - ./hf_cache:/root/.cache/huggingface   # кэш моделей HF (сохраняется между запусками)
+      - .:/app                    
+      - ./hf_cache:/root/.cache/huggingface   
       - ./models:/models
     depends_on:
       - qdrant
     env_file: .env
     environment:
-      # переменные моделей
       EMBED_MODEL: "${EMBED_MODEL:-deepvk/USER-bge-m3}"
       TRANSFORMERS_CACHE: "/root/.cache/huggingface"
       HF_HOME: "/root/.cache/huggingface"
-      MODEL_DIR: "/models/USER-bge-m3"  # <— укажем локальный путь
-      # важное: локальные адреса не через прокси
-      NO_PROXY: "127.0.0.1,localhost,qdrant,85.208.208.39,huggingface.co,cdn-lfs.huggingface.co"
-      # конфиг приложения
-      QDRANT_URL: "http://qdrant:6333"                 # напр. http://qdrant:6333 или http://127.0.0.1:6333
-      QDRANT_COLLECTION: "${QDRANT_COLLECTION:-vacancies}"
+      NO_PROXY: "${NO_PROXY}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
       TOGETHER_API_KEY: "${TOGETHER_API_KEY}"
 
