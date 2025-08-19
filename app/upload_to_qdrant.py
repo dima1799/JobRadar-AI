@@ -15,9 +15,8 @@ EMBED_MODEL = os.getenv("EMBED_MODEL")
 BATCH_SIZE = 8
 
 def main():
-    
+
     df = pd.read_csv(SAVE_VACANCIES_AIRFLOW_PATH)
-    # ожидаем колонки из парсера: title, company, experience, description, url
     for col in ["title", "company", "experience", "description", "url"]:
         if col not in df.columns:
             df[col] = ""
@@ -29,7 +28,6 @@ def main():
 
     client = QdrantClient(url=QDRANT_URL)
 
-    # создаём коллекцию при отсутствии
     try:
         client.get_collection(QDRANT_COLLECTION)
     except Exception:
@@ -51,7 +49,7 @@ def main():
             }
             points.append(
                 models.PointStruct(
-                    id=str(uuid.uuid4()),  # гарантированно уникальный ID
+                    id=str(uuid.uuid4()),  
                     vector=vec.tolist() if hasattr(vec, "tolist") else list(vec),
                     payload=payload,
                 )

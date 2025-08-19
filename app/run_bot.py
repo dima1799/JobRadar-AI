@@ -9,18 +9,16 @@ import httpx
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jobradar-bot")
 
-QDRANT_URL = "http://127.0.0.1:6333"
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "vacancies")
+QDRANT_URL_BOT = os.getenv("QDRANT_URL_BOT")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "deepvk/USER-bge-m3")
-MODEL_DIR = os.getenv("MODEL_DIR",)  # локальный путь к модели (если есть)
+EMBED_MODEL = os.getenv("EMBED_MODEL")
+MODEL_DIR = os.getenv("MODEL_DIR") 
 
-# — эмбеддер
 model = SentenceTransformer(MODEL_DIR if MODEL_DIR else EMBED_MODEL)
 
-# — qdrant
-qdrant = QdrantClient(url=QDRANT_URL)
+qdrant = QdrantClient(url=QDRANT_URL_BOT)
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -55,10 +53,10 @@ async def call_together(prompt: str, model_name: str = "meta-llama/Meta-Llama-3.
         "temperature": 0.3,
         "max_tokens": max_tokens,
     }
-    proxies = {
-    "http://": "socks5://127.0.0.1:1080",
-    "https://": "socks5://127.0.0.1:1080",
-            }
+
+    proxy_url = os.getenv("TOGETHER_PROXY")  
+    proxies = {"all://": proxy_url} if proxy_url else None
+
     async with httpx.AsyncClient(proxies=proxies,timeout=60) as client:
         r = await client.post(url, headers=headers, json=body)
         r.raise_for_status()
