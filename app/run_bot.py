@@ -5,11 +5,13 @@ from qdrant_client import QdrantClient
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import httpx
+from prometheus_client import start_http_server, Counter, Gauge 
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jobradar-bot")
 
-QDRANT_URL_BOT = os.getenv("QDRANT_URL_BOT")
+QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -17,8 +19,12 @@ EMBED_MODEL = os.getenv("EMBED_MODEL")
 MODEL_DIR = os.getenv("MODEL_DIR") 
 
 model = SentenceTransformer(MODEL_DIR if MODEL_DIR else EMBED_MODEL)
+qdrant = QdrantClient(url=QDRANT_URL,prefer_grpc=False)
 
-qdrant = QdrantClient(url=QDRANT_URL_BOT)
+# === Метрики Prometheus ===
+BOT_REQUESTS = Counter("bot_requests_total", "Общее количество запросов к боту")
+BOT_ACTIVE_USERS = Gauge("bot_active_users", "Уникальные пользователи за сессию")
+active_users = set()
 
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -28,7 +34,7 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 def retrieve(query: str, k: int = 5):
     vec = model.encode([query])[0].tolist()
-    hits = qdrant.search(collection_name=QDRANT_COLLECTION, query_vector=vec, limit=k)
+    hits = qdrant.query_points(collection_name=QDRANT_COLLECTION, query=vec, limit=k).points
     items = []
     for h in hits:
         p = h.payload or {}
@@ -82,14 +88,18 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = (update.message.text or "").strip()
     if not query:
         return
+    # обновляем метрики
+    BOT_REQUESTS.inc()
+    active_users.add(update.effective_user.id)
+    BOT_ACTIVE_USERS.set(len(active_users))
+
     await update.message.reply_text("🔎 Ищу подходящие вакансии…")
     docs = retrieve(query, k=5)
     if not docs:
-        await update.message.replyText("Пока ничего не нашёл. Попробуй уточнить запрос.")
+        await update.message.reply_text("Пока ничего не нашёл. Попробуй уточнить запрос.")
         return
     prompt = build_prompt(query, docs)
     answer = await call_together(prompt)
-    # добавим ссылки в конце
     links = "\n".join(f"• {d['title']} — {d['url']}" for d in docs)
     out = f"{answer}\n\n🔗 Ссылки:\n{links}"
     await update.message.reply_text(out[:3900], disable_web_page_preview=True)
@@ -97,6 +107,10 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 def main():
     if not TG_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN не задан")
+
+        # Запускаем сервер метрик
+    start_http_server(8000)
+    
     app = Application.builder().token(TG_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))

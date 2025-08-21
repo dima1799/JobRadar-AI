@@ -27,4 +27,4 @@ models/
 airflow/
 logs/
 Dockerfile
-docker-compose.yml
+*.yml
