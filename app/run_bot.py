@@ -60,8 +60,7 @@ async def call_together(prompt: str, model_name: str = "meta-llama/Meta-Llama-3.
         "max_tokens": max_tokens,
     }
 
-    proxy_url = os.getenv("TOGETHER_PROXY")  
-    proxies = {"all://": proxy_url} if proxy_url else None
+    proxies = os.getenv("TOGETHER_PROXY") # {"all://": proxy_url} if proxy_url else None
 
     async with httpx.AsyncClient(proxies=proxies,timeout=60) as client:
         r = await client.post(url, headers=headers, json=body)
