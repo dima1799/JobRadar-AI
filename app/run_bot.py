@@ -1,12 +1,24 @@
 import os, logging, asyncio
-from typing import List
+from typing import Dict, List, Optional, Tuple,Any
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
 import httpx
 from prometheus_client import start_http_server, Counter, Gauge 
 
+from make_short_card import make_short_card_embed
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jobradar-bot")
@@ -19,7 +31,7 @@ EMBED_MODEL = os.getenv("EMBED_MODEL")
 MODEL_DIR = os.getenv("MODEL_DIR") 
 
 model = SentenceTransformer(MODEL_DIR if MODEL_DIR else EMBED_MODEL)
-qdrant = QdrantClient(url=QDRANT_URL,prefer_grpc=False)
+qdrant = QdrantClient(url=QDRANT_URL, prefer_grpc=False)
 
 # === Метрики Prometheus ===
 BOT_REQUESTS = Counter("bot_requests_total", "Общее количество запросов к боту")
@@ -32,88 +44,83 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "я подберу релевантные вакансии."
     )
 
-def retrieve(query: str, k: int = 5):
-    vec = model.encode([query])[0].tolist()
-    hits = qdrant.query_points(collection_name=QDRANT_COLLECTION, query=vec, limit=k).points
+
+def retrieve(query: str, k: int = 5) -> List[Dict[str, Any]]:
+    vec = model.encode([query], normalize_embeddings=True)[0].tolist()
+
+    hits = qdrant.query_points(
+        collection_name=QDRANT_COLLECTION,
+        query=vec,
+        limit=k,
+        with_payload=True,
+        with_vectors=False,
+    ).points
+
     items = []
     for h in hits:
         p = h.payload or {}
         items.append({
+            "id": h.id,
             "score": h.score,
-            "title": p.get("title", "-"),
-            "company": p.get("company", "-"),
-            "experience": p.get("experience", "-"),
-            "description": p.get("description", "-")[:1200],
-            "url": p.get("url", "-"),
+            "title": p.get("title") or p.get("name") or "-",
+            "company": p.get("company") or p.get("employer") or "-",
+            "experience": p.get("experience") or "-",
+            "description": p.get("description") or "",
+            "snippet": p.get("snippet") or "",
+            "url": p.get("url") or p.get("alternate_url") or "-",
+            "salary_text": p.get("salary_text") or p.get("salary_str") or "",
         })
     return items
 
-async def call_together(prompt: str, model_name: str = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", max_tokens: int = 600):
-    if not TOGETHER_API_KEY:
-        return "🛑 TOGETHER_API_KEY не задан."
-    url = "https://api.together.xyz/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {TOGETHER_API_KEY}", "Content-Type": "application/json"}
-    body = {
-        "model": model_name,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.3,
-        "max_tokens": max_tokens,
-    }
 
-    proxies = os.getenv("TOGETHER_PROXY") # {"all://": proxy_url} if proxy_url else None
+def build_kb(url: str) -> InlineKeyboardMarkup:
+    btn = InlineKeyboardButton("🔗 Открыть вакансию", url=url)
+    return InlineKeyboardMarkup([[btn]])
 
-    async with httpx.AsyncClient(proxies=proxies,timeout=60) as client:
-        r = await client.post(url, headers=headers, json=body)
-        r.raise_for_status()
-        data = r.json()
-        return data["choices"][0]["message"]["content"]
-
-def build_prompt(prefs: str, docs: List[dict]) -> str:
-    ctx = "\n\n".join(
-        f"- {d['title']} — {d['company']} (опыт: {d['experience']})\n"
-        f"  Описание: {d['description']}\n"
-        f"  URL: {d['url']}"
-        for d in docs
-    )
-    return (
-        "Ты помощник по поиску работы. Пользователь описал предпочтения по вакансии.\n"
-        "Проанализируй найденные вакансии и кратко перечисли стек, предполагаемые задачи и дай рекомендации.\n"
-        "Структура ответа: 1) краткий обзор; 2) список вакансий с тезисами\n\n"
-        f"Предпочтения пользователя: {prefs}\n\n"
-        f"Релевантные вакансии:\n{ctx}"
-    )
 
 async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = (update.message.text or "").strip()
     if not query:
         return
-    # обновляем метрики
+
     BOT_REQUESTS.inc()
     active_users.add(update.effective_user.id)
     BOT_ACTIVE_USERS.set(len(active_users))
 
     await update.message.reply_text("🔎 Ищу подходящие вакансии…")
+
     docs = retrieve(query, k=5)
     if not docs:
         await update.message.reply_text("Пока ничего не нашёл. Попробуй уточнить запрос.")
         return
-    prompt = build_prompt(query, docs)
-    answer = await call_together(prompt)
-    links = "\n".join(f"• {d['title']} — {d['url']}" for d in docs)
-    out = f"{answer}\n\n🔗 Ссылки:\n{links}"
-    await update.message.reply_text(out[:3900], disable_web_page_preview=True)
+
+    # Отправляем вакансии (каждая — отдельным сообщением)
+    for doc in docs:
+        try:
+            card_text, _debug = make_short_card_embed(doc, model)  # HTML текст
+            kb = build_kb(doc["url"]) if doc.get("url", "").startswith("http") else None
+
+            await update.message.reply_text(
+                card_text[:3900],
+                parse_mode="HTML",
+                reply_markup=kb,
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            logger.exception("Ошибка при отправке вакансии в Telegram")
+
 
 def main():
     if not TG_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN не задан")
 
-        # Запускаем сервер метрик
     start_http_server(8000)
-    
+
     app = Application.builder().token(TG_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
     app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
