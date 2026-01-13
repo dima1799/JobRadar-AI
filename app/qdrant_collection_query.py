@@ -9,7 +9,7 @@ MODEL_DIR = os.getenv("MODEL_DIR")
 EMBED_MODEL = os.getenv("EMBED_MODEL")
 
 client = QdrantClient(url=QDRANT_URL, prefer_grpc=False)
-COLLECTION = "vacancies"
+COLLECTION = QDRANT_COLLECTION
 
 points, next_offset = client.scroll(
     collection_name=COLLECTION,
