@@ -4,6 +4,7 @@ from typing import Dict, List, Any
 
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from telegram import (
     Update,
@@ -50,12 +51,22 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 def retrieve(query: str, k: int = 5, fetch: int = 50):
     vec = model.encode([query], normalize_embeddings=True)[0].tolist()
+    
+    flt = Filter(
+        must=[
+        FieldCondition(
+            key="is_active",
+            match=MatchValue(value=True)
+                )
+            ]
+        )
     hits = qdrant.query_points(
         collection_name=QDRANT_COLLECTION,
         query=vec,
         limit=fetch,
         with_payload=True,
         with_vectors=False,
+        query_filter=flt, 
     ).points
 
     seen = set()

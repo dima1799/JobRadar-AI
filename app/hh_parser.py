@@ -154,7 +154,7 @@ def add_description(df: pd.DataFrame) -> pd.DataFrame:
 def parse_hh_vacancies(
     search_queries,
     per_page: int = 50,
-    area: int = 1,
+    area: list[int] = [1,2,3],
     period: int = 1,
     pages_to_parse: int = 2,
     field: str = "name",
@@ -177,12 +177,12 @@ def parse_hh_vacancies(
             "alternate_url": "url",
         }
     )
-    return df[["title", "company", "experience", "description", "url"]]
+    return df[["title","professional_roles_name", "company", "experience", "description", "url","area_name"]]
 
 
 if __name__ == "__main__":
-    queries = ["Data Scientist","ML Engineer"]
-    result_df = parse_hh_vacancies(queries, prof_names=["Дата-сайентист"])
+    queries = ["Data Scientist","ML Engineer",'Аналитик']
+    result_df = parse_hh_vacancies(queries,prof_names=["Дата-сайентист",'Аналитик'])
     result_df.to_csv(SAVE_VACANCIES_AIRFLOW_PATH, index=False)
     print("cwd:", os.getcwd())
     print(f"✅ Файл сохранён: {SAVE_VACANCIES_AIRFLOW_PATH}")

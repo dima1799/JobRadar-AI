@@ -10,14 +10,14 @@ from tqdm import tqdm
 
 SAVE_VACANCIES_AIRFLOW_PATH = os.getenv("SAVE_VACANCIES_AIRFLOW_PATH")
 QDRANT_URL = os.getenv("QDRANT_URL")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION_V2")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
 EMBED_MODEL = os.getenv("EMBED_MODEL")
 BATCH_SIZE = 8
 
 def main():
 
     df = pd.read_csv(SAVE_VACANCIES_AIRFLOW_PATH)
-    for col in ["title", "company","experience", "description", "url"]: #"schedule_name"
+    for col in ["title","professional_roles_name", "company","experience", "description", "url","area_name"]: #"schedule_name"
         if col not in df.columns:
             df[col] = ""
 
@@ -43,10 +43,11 @@ def main():
             payload = {
                 "title": row.get("title", ""),
                 "company": row.get("company", ""),
-               # "schedule_name": row.get("schedule_name", ""),
+                "professional_roles_name": row.get("professional_roles_name", ""),
                 "experience": row.get("experience", ""),
                 "description": row.get("description", ""),
                 "url": row.get("url", ""),
+                "area_name": row.get("area_name", ""),
             }
             points.append(
                 models.PointStruct(
