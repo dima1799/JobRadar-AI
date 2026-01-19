@@ -166,7 +166,6 @@ def parse_hh_vacancies(
     if prof_names:
         df = df[df["professional_roles_name"].isin(prof_names)]
     df = df.reset_index(drop=True)
-    # test fix url
     df = add_description(df)
     df.drop(columns= "url",inplace=True)
     df = df.rename(

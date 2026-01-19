@@ -30,8 +30,8 @@ from make_short_card import make_short_card_embed
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jobradar-bot")
 
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "vacancies")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 EMBED_MODEL = os.getenv("EMBED_MODEL")
 MODEL_DIR = os.getenv("MODEL_DIR")
@@ -153,7 +153,7 @@ def retrieve(query: str, k: int = 5, fetch: int = 50) -> List[Dict[str, Any]]:
         query_filter=active_filter(),
     ).points
 
-    # дедуп по url / title+company
+    
     seen = set()
     items: List[Dict[str, Any]] = []
     for h in hits:
@@ -297,7 +297,6 @@ async def on_filters_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     kind = parts[1]
 
-    # flt:<kind>:page:<n>
     if parts[2] == "page" and len(parts) == 4:
         page = int(parts[3])
         items = ROLES_CACHE if kind == "role" else AREAS_CACHE
@@ -307,7 +306,6 @@ async def on_filters_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # flt:<kind>:pick:<page>:<value>
     if parts[2] == "pick" and len(parts) == 4:
         rest = parts[3]
         if ":" not in rest:
@@ -397,7 +395,6 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    # меню-кнопки
     if text == "🔎 Векторный поиск":
         await on_vector_entry(update, ctx)
         return
@@ -410,14 +407,12 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await on_help(update, ctx)
         return
 
-    # обычный ввод
     mode = ctx.user_data.get("mode")
 
     if mode != "vector":
         await update.message.reply_text("Сначала выбери режим в меню 👇", reply_markup=MAIN_MENU)
         return
 
-    # vector search
     BOT_REQUESTS.inc()
     if update.effective_user:
         active_users.add(update.effective_user.id)
@@ -455,14 +450,11 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
 
-    # callbacks
     app.add_handler(CallbackQueryHandler(on_filters_callback, pattern=r"^flt:"))
     app.add_handler(CallbackQueryHandler(on_nav, pattern=r"^nav:"))
 
-    # text
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
 
-    # кеш на старте (не критично)
     try:
         refresh_filters_cache()
     except Exception:

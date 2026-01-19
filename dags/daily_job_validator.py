@@ -30,7 +30,6 @@ dag = DAG(
 )
 
 with dag:
-    # валидация
     validator = BashOperator(
         task_id="validate_archived_in_qdrant",
         bash_command=f"python {APP_AIRFLOW_PATH}vacancies_validator.py",

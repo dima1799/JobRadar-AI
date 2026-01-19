@@ -7,8 +7,8 @@ from typing import Optional, List, Any, Dict, Tuple
 import httpx
 from qdrant_client import QdrantClient
 
-QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "vacancies")
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
 
 SCROLL_LIMIT = int(os.getenv("QDRANT_SCROLL_LIMIT", "256"))
 UPDATE_BATCH = int(os.getenv("QDRANT_UPDATE_BATCH", "128"))
@@ -36,7 +36,6 @@ def fetch_meta(hc: httpx.Client, hh_id: str) -> Tuple[Optional[List[str]], Optio
     r.raise_for_status()
     data = r.json()
 
-    # professional roles
     roles = data.get("professional_roles") or []
     role_names = []
     for rr in roles:
@@ -44,7 +43,6 @@ def fetch_meta(hc: httpx.Client, hh_id: str) -> Tuple[Optional[List[str]], Optio
         if name:
             role_names.append(str(name).strip())
 
-    # uniq preserve order
     seen = set()
     uniq_roles = []
     for n in role_names:
@@ -52,7 +50,6 @@ def fetch_meta(hc: httpx.Client, hh_id: str) -> Tuple[Optional[List[str]], Optio
             seen.add(n)
             uniq_roles.append(n)
 
-    # area
     area_name = None
     area = data.get("area")
     if isinstance(area, dict):
@@ -95,7 +92,6 @@ def main():
 
             points_seen += len(points)
 
-            # группируем по одинаковому payload чтобы меньше set_payload дергать
             groups: Dict[Tuple[str, str], List[Any]] = {}
 
             for pt in points:
@@ -116,7 +112,6 @@ def main():
 
                 time.sleep(SLEEP_SEC)
 
-                # если HH ничего не вернул — пропускаем
                 if not roles and not area_name:
                     continue
 

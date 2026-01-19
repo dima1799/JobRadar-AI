@@ -29,7 +29,6 @@ def make_short_card_embed(vac: Dict, model=None, max_len: int = 3500) -> Tuple[s
         lines.append(f"💰 <b>{_escape_html(str(salary))}</b>")
     lines.append("")
     if desc:
-        # чтобы не упереться в лимиты Telegram, режем
         if len(desc) > max_len:
             desc = desc[:max_len].rsplit(" ", 1)[0] + "…"
         lines.append(desc)
